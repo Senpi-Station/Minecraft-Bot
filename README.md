@@ -14,8 +14,8 @@ A customizable Minecraft bot built with Mineflayer featuring:
 ## 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/minecraft-bot.git
-cd minecraft-bot
+https://github.com/Senpai-Station/Minecraft-Bot.git
+cd Minecraft-Bot
 
 2. Install Dependencies
 npm install
