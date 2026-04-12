@@ -1,34 +1,34 @@
-Minecraft Mineflayer AFK Bot
+# 🤖 Minecraft Mineflayer AFK Bot
 
-A customizable Minecraft bot using Mineflayer with Anti-AFK, player following, and reconnection logic.
+A customizable Minecraft bot built with Mineflayer featuring:
 
-How to Run
-1. Clone the Repository
+- 💤 Anti-AFK system  
+- 👣 Player following  
+- 🔄 Auto-reconnection  
+- ⚙️ Easy configuration  
 
-Clone the repository to your local machine:
+---
 
-git clone <your-repo-url>
-cd <project-directory>
+# 📦 Installation
+
+## 1. Clone the Repository
+
+```bash
+git clone https://github.com/your-username/minecraft-bot.git
+cd minecraft-bot
+
 2. Install Dependencies
-
-Install required npm packages:
-
 npm install
-3. Configure the Bot
 
-Edit config.js with your server details and bot credentials:
+Configuration
+
+Edit the config.js file with your server and account details:
 
 module.exports = {
-  host: '',  // Minecraft server host
-  port: ,                       // Server port
-  version: '',                 // Minecraft version
-  username: '',           // Bot username
-  password: '',           // Bot password
-  auth: 'offline'                    // Authentication type ('offline' or 'mojang')
+  host: '',        // Minecraft server IP/host
+  port: 25565,     // Server port (default: 25565)
+  version: '',     // Minecraft version (e.g. '1.20.1')
+  username: '',    // Bot username/email
+  password: '',    // Bot password (leave empty for offline mode)
+  auth: 'offline'  // 'offline' or 'mojang'
 };
-
-4. Run the Bot
-
-Start the bot:
-
-node index.js
