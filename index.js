@@ -11,15 +11,13 @@ const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const autoeat      = require('mineflayer-auto-eat');
 
 // ── Configuration ────────────────────────────────────────────
-// SECURITY: Move sensitive fields to environment variables in production.
-// e.g.  host: process.env.BOT_HOST || 'localhost'
 const config = {
-  host    : process.env.BOT_HOST     || 'CreeperSMP-95.aternos.me',
-  port    : parseInt(process.env.BOT_PORT || '59031', 10),
-  version : process.env.BOT_VERSION  || '1.21.1',
-  username: process.env.BOT_USER     || 'development',
-  password: process.env.BOT_PASS     || 'amazing#2026',
-  auth    : 'offline'
+  host   : '',
+  port   : 25565),
+  version:,
+  username:,
+  password:,
+  auth   : 'offline'
 };
 
 // ── State ────────────────────────────────────────────────────
@@ -27,9 +25,9 @@ let bot              = null;
 let afkInterval      = null;
 let lastPosition     = null;
 
-const POS_THRESHOLD       = 1;          // FIX: was 5 — too large, stuck check rarely triggered
+const POS_THRESHOLD       = 1;          
 const AFK_ACTIONS         = Object.freeze(['jump', 'look', 'move', 'swing']);
-const RECONNECT_BASE_MS   = 5_000;      // FIX: base delay (was full 10 s per attempt)
+const RECONNECT_BASE_MS   = 5_000;      //  base delay (was full 10 s per attempt)
 const MAX_RECONNECT_DELAY = 120_000;    // cap exponential back-off at 2 min
 const MAX_RECONNECT       = 100;
 let reconnectAttempts     = 0;
@@ -56,15 +54,12 @@ function createBot() {
     port    : config.port,
     version : config.version,
     username: config.username,
-    auth    : config.auth
-    // FIX: password intentionally omitted from createBot() — handled via
-    //      in-game /login command so it never travels in the protocol handshake.
+    auth    : config.auth.
   });
 
   // ── Plugin Loading ───────────────────────────────────────
   bot.loadPlugin(pathfinder);
 
-  // FIX: robust autoeat loading — handles both old and new API shapes
   const eatPlugin = autoeat.plugin ?? autoeat;
   if (typeof eatPlugin === 'function') {
     bot.loadPlugin(eatPlugin);
@@ -94,10 +89,10 @@ function setupBotEvents() {
     if (bot.autoEat) {
       bot.autoEat.options = {
         priority   : 'foodValue',
-        startAt    : 16,          // FIX: was 10 — eat earlier to avoid starvation
+        startAt    : 16,         
         bannedFood : ['rotten_flesh', 'spider_eye', 'poisonous_potato']
       };
-      bot.autoEat.enable();      // FIX: explicitly enable (required by newer versions)
+      bot.autoEat.enable();    
     }
 
     log('Spawned — AntiAFK active.');
@@ -106,7 +101,7 @@ function setupBotEvents() {
   });
 
   // ── Auto-Auth ────────────────────────────────────────────
-  // FIX: listen on 'message' (raw IChatComponent) instead of the deprecated
+  // listen on 'message' (raw IChatComponent) instead of the deprecated
   //      'messagestr' which is stripped in newer mineflayer versions.
   bot.on('message', (jsonMsg) => {
     const text = jsonMsg.toString().toLowerCase();
@@ -121,7 +116,7 @@ function setupBotEvents() {
   bot.on('end',    (reason)  => { log(`Disconnected: ${reason ?? 'unknown'}`);  scheduleReconnect(); });
   bot.on('kicked', (reason)  => { warn(`Kicked: ${reason}`);                    scheduleReconnect(); });
 
-  // FIX: distinguish fatal vs. transient errors; don't reconnect on auth failures
+  // distinguish fatal vs. transient errors; don't reconnect on auth failures
   bot.on('error',  (e) => {
     err(`Network error: ${e.message}`);
     if (['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND'].includes(e.code)) {
@@ -138,13 +133,12 @@ function setupBotEvents() {
 
   // ── Entity tracking ──────────────────────────────────────
   bot.on('entityHurt', (entity) => {
-    if (entity === bot.entity) return;           // FIX: ignore self-damage
+    if (entity === bot.entity) return;           
     if (entity.type === 'player') {
       bot.lookAt(entity.position.offset(0, 1.6, 0), true);
     }
   });
 
-  // FIX: throttle physicsTick look-at to avoid wasting CPU every single tick
   let lookThrottleTimer = null;
   bot.on('physicsTick', () => {
     if (lookThrottleTimer)                       return;
@@ -196,7 +190,6 @@ function startAntiAFK() {
 }
 
 function performRandomAction() {
-  // FIX: guard against bot.pathfinder being undefined
   if (bot.pathfinder?.isMoving()) return;
 
   const action = AFK_ACTIONS[Math.floor(Math.random() * AFK_ACTIONS.length)];
@@ -209,11 +202,9 @@ function performRandomAction() {
 
       case 'look':
         bot.look(Math.random() * Math.PI * 2, (Math.random() - 0.5) * Math.PI);
-        // FIX: yaw was correct, but pitch was missing the *PI factor — now full range
         break;
 
       case 'move': {
-        // FIX: use block-scoped const inside case to avoid lint errors
         const dirs = ['forward', 'back', 'left', 'right'];
         const dir  = dirs[Math.floor(Math.random() * dirs.length)];
         bot.setControlState(dir, true);
@@ -226,7 +217,7 @@ function performRandomAction() {
         break;
     }
   } catch (e) {
-    warn('performRandomAction error:', e.message);  // FIX: surface errors instead of silencing
+    warn('performRandomAction error:', e.message);  
   }
 }
 
@@ -236,7 +227,6 @@ function checkIfStuck() {
 
   if (lastPosition) {
     const moved = pos.distanceTo(lastPosition);
-    // FIX: POS_THRESHOLD reduced to 1 block — was 5 (too coarse)
     if (moved < POS_THRESHOLD && !bot.pathfinder?.isMoving()) {
       const rx = pos.x + Math.random() * 6 - 3;
       const rz = pos.z + Math.random() * 6 - 3;
@@ -284,7 +274,7 @@ const commands = {
   move: (args) => {
     if (args.length !== 3) return warn('Usage: move <x> <y> <z>');
     const [x, y, z] = args.map(Number);
-    if ([x, y, z].some(isNaN)) return warn('Coordinates must be numbers.');   // FIX: validate input
+    if ([x, y, z].some(isNaN)) return warn('Coordinates must be numbers.');   
     bot.pathfinder.setGoal(new goals.GoalBlock(x, y, z));
     log(`Navigating to (${x}, ${y}, ${z})`);
     rl.prompt();
@@ -299,7 +289,6 @@ const commands = {
     rl.prompt();
   },
 
-  // FIX: added missing "unfollow" command to stop pathfinder
   unfollow: () => {
     bot.pathfinder.setGoal(null);
     log('Stopped following.');
@@ -317,7 +306,6 @@ const commands = {
     rl.prompt();
   },
 
-  // FIX: added "pos" command — useful for setting waypoints
   pos: () => {
     const p = bot.entity?.position;
     if (!p) return warn('Position unavailable.');
@@ -331,7 +319,7 @@ rl.on('line', (input) => {
   if (!bot?.entity) return warn('Bot is not ready yet.');
 
   const [command, ...args] = input.trim().split(/\s+/);
-  if (!command) { rl.prompt(); return; }       // FIX: handle empty input gracefully
+  if (!command) { rl.prompt(); return; }      
 
   const handler = commands[command.toLowerCase()];
   if (handler) {
@@ -342,7 +330,7 @@ rl.on('line', (input) => {
   rl.prompt();
 });
 
-rl.on('close', () => process.exit(0));         // FIX: handle Ctrl+D cleanly
+rl.on('close', () => process.exit(0));         
 
 // ── Unhandled rejection guard ────────────────────────────────
 process.on('unhandledRejection', (reason) => {
