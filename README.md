@@ -12,7 +12,7 @@ A customizable Minecraft bot built with Mineflayer featuring:
 ## 1. Clone the Repository
 
 ```bash
-https://github.com/Senpai-Station/Minecraft-Bot.git
+https://github.com/Senpi-Station/Minecraft-Bot.git
 cd Minecraft-Bot
 
 2. Install Dependencies
