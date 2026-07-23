@@ -1,0 +1,13 @@
+{
+  "name": "mc-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Offline Minecraft bot with auto login/register",
+  "main": "src/bot.js",
+  "scripts": {
+    "start": "node src/bot.js"
+  },
+  "dependencies": {
+    "mineflayer": "^4.20.0"
+  }
+}
