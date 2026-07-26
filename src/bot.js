@@ -1,45 +1,30 @@
+#!/usr/bin/env node
+
 import mineflayer from 'mineflayer'
 import readline from 'readline'
+import { config, term, C } from './config.js'
+import { setupAuth } from './auth.js'
+import { setupAutoEat } from './auto-eat.js'
+import { setupCommands } from './commands.js'
+import { setupEffects } from './effects.js'
 
-const config = {
-  host: process.env.MC_HOST || 'CreeperSMP-95.aternos.me',
-  port: parseInt(process.env.MC_PORT || '59031'),
-  username: process.env.MC_USERNAME || 'afk_bot',
-  password: process.env.MC_PASSWORD || 'amazing#2026',
-  auth: 'offline',
-  version: process.env.MC_VERSION || false,
-  registerCmd: '/register {pw} {pw}',
-  loginCmd: '/login {pw}',
-  owner: process.env.MC_OWNER || 'SenpiStation77',
-  verbose: process.env.VERBOSE !== 'false',
+const SPAWN_TIMEOUT = 60000
+
+const state = {
+  authMode: 'auto',
+  authed: false,
+  attempts: 0,
 }
 
-const owner = config.owner.toLowerCase()
+let botInstance = null
+let cmds = null
+let spawnTimer = null
+let inputQueue = []
 let reconnectTimer = null
-let attempts = 0
-let authMode = 'auto'
-let authed = false
-
-function reset() {
-  attempts = 0
-  authed = false
-}
-
-function send(bot, msg) {
-  log(`>> ${msg}`)
-  bot.chat(msg)
-}
-
-function doLogin(bot) {
-  send(bot, config.loginCmd.replace(/\{pw\}/g, config.password))
-}
-
-function doRegister(bot) {
-  send(bot, config.registerCmd.replace(/\{pw\}/g, config.password))
-}
 
 function createBot() {
-  reset()
+  state.authed = false
+
   const bot = mineflayer.createBot({
     host: config.host,
     port: config.port,
@@ -47,148 +32,138 @@ function createBot() {
     auth: config.auth,
     version: config.version || false,
     viewDistance: 6,
-    logErrors: true,
+    logErrors: false,
+    autoRespawn: true,
   })
 
   bot.on('login', () => {
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
     botInstance = bot
-    log(`Connected as ${config.username}`)
+    state.attempts = 0
+    term.sys(`Connected as ${config.username}`)
+    if (bot.game) {
+      term.sys(`Server: ${bot.game.serverBrand}, ${bot.game.levelType}, ${bot.game.gameMode}, ${bot.version}`)
+    }
+
+    const eatFn = setupAutoEat(bot, state)
+    setupAuth(bot, state)
+    const effects = setupEffects(bot, state)
+    const commands = setupCommands(bot, state, eatFn, effects)
+    cmds = commands
+    state.cmds = commands
+    state.effects = effects
   })
 
   bot.on('spawn', () => {
-    log('Spawned')
-    attempts = 0
+    if (spawnTimer) { clearTimeout(spawnTimer); spawnTimer = null }
+    term.auth('Spawned')
+    bot.chat('/attribute @s minecraft:scale base set 0.9999999')
+    flushQueue()
+    setTimeout(() => {
+      if (state.authed && state.effects) state.effects.start()
+    }, 2000)
   })
 
-  let sentAuth = false
-
-  bot.on('messagestr', (json) => {
-    const msg = typeof json === 'string' ? json : ''
-    if (!msg) return
-    const lower = msg.toLowerCase()
-
-    if (lower.includes('successfully registered') || lower.includes('registration succeeded')) {
-      authed = true
-      authMode = 'login'
-      log('Registered!')
-      return
-    }
-    if (lower.includes('logged in') || lower.includes('successfully logged')) {
-      authed = true
-      log('Logged in!')
-      return
-    }
-
-    if (authed || sentAuth) return
-
-    const needReg = lower.includes('register') || lower.includes('not registered') || lower.includes('choose a password') || (lower.includes('type your password') && lower.includes('twice'))
-    const needLog = lower.includes('login') || lower.includes('/log') || lower.includes('type your password') || lower.includes('enter your password')
-
-    if (needReg) {
-      sentAuth = true
-      if (authMode === 'auto') authMode = 'register'
-      log('Need register')
-      doRegister(bot)
-    } else if (needLog) {
-      sentAuth = true
-      log('Need login')
-      doLogin(bot)
+  bot.on('error', (err) => {
+    if (err.message !== 'read ECONNRESET' && err.message !== 'write ECONNRESET') {
+      term.err(err.message)
     }
   })
-
-  bot.on('chat', (username, message) => {
-    if (username === config.username) return
-    log(`[CHAT] ${username}: ${message}`)
-
-    const sender = username.toLowerCase()
-    if (sender === owner && message.startsWith('!')) {
-      handleCmd(bot, username, message.slice(1).trim())
-    }
-  })
-
-  function handleCmd(bot, sender, cmd) {
-    const parts = cmd.split(/\s+/)
-    const action = parts[0].toLowerCase()
-    const args = parts.slice(1)
-    log(`Cmd: ${cmd}`)
-
-    switch (action) {
-      case 'tpa':
-      case 'come':
-        send(bot, `/tpa ${args[0] || sender}`)
-        break
-      case 'go':
-        send(bot, `/tpahere ${args[0] || sender}`)
-        break
-      case 'tpaccept':
-      case 'yes':
-        send(bot, '/tpaccept')
-        break
-      case 'msg':
-      case 'tell':
-      case 'dm':
-        send(bot, `/msg ${args[0]} ${args.slice(1).join(' ')}`)
-        break
-      case 'say':
-        send(bot, args.join(' '))
-        break
-      case 'afk':
-        send(bot, '/afk')
-        break
-      case 'ping':
-        send(bot, 'pong')
-        break
-      case 'help':
-        send(bot, '!tpa <p>, !come, !go, !tpaccept, !msg, !say, !ping')
-        break
-      case 'stop':
-        log('Stopping')
-        bot.end('Shutdown')
-        process.exit(0)
-        break
-      default:
-        send(bot, `/${action} ${args.join(' ')}`)
-        break
-    }
-  }
-
-  bot.on('kicked', (reason) => {
-    const msg = typeof reason === 'string' ? reason : JSON.stringify(reason)
-    log(`Kicked: ${msg}`)
-    if (!authed && msg.toLowerCase().includes('not registered')) {
-      authMode = 'register'
-    }
-    reconnect()
-  })
-
-  bot.on('error', (err) => log(`Error: ${err.message}`))
 
   bot.on('end', (reason) => {
-    botInstance = null
-    log(`Disconnected: ${reason}`)
-    reconnect()
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
+    if (botInstance === bot) botInstance = null
+    if (spawnTimer) { clearTimeout(spawnTimer); spawnTimer = null }
+    const msg = reason && reason !== 'socketClosed' ? `: ${reason}` : ''
+    term.err(`Disconnected${msg}`)
+    scheduleReconnect()
   })
+
+  bot.on('kicked', () => {
+    if (botInstance === bot) botInstance = null
+  })
+
+  bot.on('playerJoined', (player) => {
+    if (player.username !== config.username) term.sys(`${player.username} joined`)
+  })
+
+  bot.on('playerLeft', (player) => {
+    if (player.username !== config.username) term.sys(`${player.username} left`)
+  })
+
+  bot.on('health', () => {
+    if (bot.health > 0 && bot.health < 6) term.err(`Low health: ${bot.health.toFixed(1)}`)
+  })
+
+  bot.on('messagestr', (msg) => {
+    if (typeof msg !== 'string' || !msg) return
+    if (msg.startsWith('[') || msg.startsWith('<')) return
+    if (!state.authed) return
+    term.raw(msg)
+  })
+
+  spawnTimer = setTimeout(() => {
+    if (!botInstance || botInstance !== bot) return
+    if (bot.entity?.position) return
+    term.err('Spawn timeout, reconnecting')
+    bot.end('Spawn timeout')
+  }, SPAWN_TIMEOUT)
 }
 
-function reconnect() {
-  if (reconnectTimer) clearTimeout(reconnectTimer)
-  attempts++
-  const delay = Math.min(5000 * attempts, 60000)
-  log(`Reconnect in ${delay/1000}s (${attempts})`)
-  reconnectTimer = setTimeout(() => { attempts = 0; createBot() }, delay)
+function scheduleReconnect() {
+  if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null }
+  state.attempts++
+  const delay = Math.min(config.reconnectMin * state.attempts, config.reconnectMax)
+  term.sys(`Reconnect in ${delay / 1000}s (attempt ${state.attempts})`)
+  reconnectTimer = setTimeout(createBot, delay)
 }
 
-function log(msg) {
-  if (config.verbose) console.log(`[BOT] ${msg}`)
+function flushQueue() {
+  if (!inputQueue.length) return
+  const queue = inputQueue.splice(0)
+  for (const input of queue) processInput(input)
 }
 
-let botInstance = null
+function processInput(input) {
+  if (!botInstance || !cmds) {
+    inputQueue.push(input)
+    return
+  }
 
-const rl = readline.createInterface({ input: process.stdin, prompt: '' })
+  if (input.startsWith('!')) {
+    cmds.handle('terminal', input.slice(1).trim())
+  } else {
+    botInstance.chat(input)
+    term.ter(`>> ${input}`)
+  }
+}
+
+console.log(`\n${C.cyan}${C.dim}┌─${'─'.repeat(48)}─┐${C.reset}`)
+console.log(`${C.cyan}${C.dim}│${C.reset}  ${C.yellow}Minecraft Bot${C.reset}`)
+console.log(`${C.cyan}${C.dim}│${C.reset}  ${C.cyan}${config.host}:${config.port}${C.reset}`)
+console.log(`${C.cyan}${C.dim}│${C.reset}  ${C.dim}Type !help or anything to chat${C.reset}`)
+console.log(`${C.cyan}${C.dim}└─${'─'.repeat(48)}─┘${C.reset}\n`)
+
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+function showPrompt() { rl.prompt(true) }
+
 rl.on('line', (line) => {
   const input = line.trim()
-  if (!input || !botInstance) return
-  botInstance.chat(input.startsWith('/') ? input : `/${input}`)
+  if (!input) { showPrompt(); return }
+  processInput(input)
+  showPrompt()
+})
+
+rl.on('SIGINT', () => {
+  console.log()
+  term.ter('Shutting down')
+  if (botInstance) botInstance.quit('Terminal shutdown')
+  process.exit(0)
+})
+
+process.on('unhandledRejection', (err) => {
+  term.err(`Unhandled: ${err.message || err}`)
 })
 
 createBot()
+showPrompt()

@@ -2,12 +2,17 @@
   "name": "mc-bot",
   "version": "1.0.0",
   "type": "module",
-  "description": "Offline Minecraft bot with auto login/register",
+  "description": "Offline Minecraft bot with auto login/register and pathfinding",
   "main": "src/bot.js",
+  "bin": {
+    "mc-bot": "./src/bot.js"
+  },
   "scripts": {
-    "start": "node src/bot.js"
+    "start": "node src/bot.js",
+    "bot": "node src/bot.js"
   },
   "dependencies": {
-    "mineflayer": "^4.20.0"
+    "mineflayer": "^4.20.0",
+    "mineflayer-pathfinder": "^2.4.5"
   }
 }
